@@ -5,6 +5,7 @@ require_once __DIR__ . '/functions.php';
 
 $config = [
     'host' => '127.0.0.1',
+    'port' => '3306',
     'dbname' => 'monitoring_system',
     'user' => 'root',
     'password' => '',
@@ -20,10 +21,24 @@ if (is_file($configFile)) {
     }
 }
 
+$host = trim((string)$config['host']);
+$port = trim((string)($config['port'] ?? ''));
+
+if ($port === '' && preg_match('/^([^:]+):(\d+)$/', $host, $matches)) {
+    $host = $matches[1];
+    $port = $matches[2];
+}
+
+$dsn = "mysql:host={$host};dbname={$config['dbname']};charset=utf8mb4";
+
+if ($port !== '') {
+    $dsn .= ";port={$port}";
+}
+
 try {
 
     $pdo = new PDO(
-        "mysql:host={$config['host']};dbname={$config['dbname']};charset=utf8mb4",
+        $dsn,
         $config['user'],
         $config['password']
     );

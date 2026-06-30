@@ -42,6 +42,7 @@ config/database.php
 ```php
 return [
     'host' => 'localhost',
+    'port' => '3306',
     'dbname' => 'имя_базы',
     'user' => 'пользователь',
     'password' => 'пароль',
