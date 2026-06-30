@@ -9,6 +9,7 @@ $config = [
     'dbname' => 'monitoring_system',
     'user' => 'root',
     'password' => '',
+    'debug' => false,
 ];
 
 $configFile = BASE_PATH . '/config/database.php';
@@ -53,6 +54,11 @@ try {
     error_log('Database connection error: ' . $e->getMessage());
 
     http_response_code(500);
+
+    if (!empty($config['debug'])) {
+        die('Database connection error: ' . e($e->getMessage()));
+    }
+
     die('Database connection error');
 
 }
