@@ -50,6 +50,8 @@ try {
 
 } catch (PDOException $e) {
 
+    error_log('Database connection error: ' . $e->getMessage());
+
     http_response_code(500);
     die('Database connection error');
 
