@@ -31,11 +31,6 @@ if (is_file($configFile)) {
     }
 }
 
-if (empty($config['debug'])) {
-    echo "Debug is disabled. Set 'debug' => true in config/database.php temporarily.\n";
-    exit;
-}
-
 $host = trim((string)$config['host']);
 $port = trim((string)($config['port'] ?? ''));
 
