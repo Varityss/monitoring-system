@@ -1,0 +1,17 @@
+Options -Indexes
+
+DirectoryIndex index.php
+
+<FilesMatch "\.(sql|md|lock|json|dist)$">
+    Require all denied
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+RedirectMatch 403 /(config|database|vendor)(/|$)
+
+<FilesMatch "^\\.">
+    Require all denied
+    Order allow,deny
+    Deny from all
+</FilesMatch>

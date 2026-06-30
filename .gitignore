@@ -1,0 +1,11 @@
+/.agents/
+/.codex/
+/release/
+/uploads/documents/*
+!/uploads/documents/.gitkeep
+/config/database.php
+/.zip
+/monitoring-system.zip
+*.log
+*.tmp
+Thumbs.db
