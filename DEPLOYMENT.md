@@ -19,7 +19,7 @@ SQL-файл содержит рабочие данные. Его нельзя �
 
 ## Установка
 
-1. Создайте на хостинге пустую БД в кодировке `utf8mb4`.
+1. Создайте на хостинге пустую БД в кодировке `utf8mb4` и сортировке `utf8mb4_unicode_ci`.
 2. Импортируйте `monitoring-system-production.sql`.
 3. Распакуйте `monitoring-system-code.zip` в каталог сайта.
 4. Скопируйте `config/database.example.php` в `config/database.php` и укажите параметры БД.
@@ -41,9 +41,10 @@ SQL-файл содержит рабочие данные. Его нельзя �
 ```bash
 php database/migrations/20260910_security_hardening.php
 php database/migrations/20260911_move_documents.php
+php database/migrations/20260911_mariadb_compatibility.php
 ```
 
-Перед миграцией всегда создавайте резервную копию. Миграции повторяемы и не создают второго администратора.
+Последняя миграция заменяет специфичную для MySQL 8 сортировку `utf8mb4_0900_ai_ci` на поддерживаемую MariaDB `utf8mb4_unicode_ci`. Перед миграцией всегда создавайте резервную копию. Миграции повторяемы и не создают второго администратора.
 
 ## Первый вход
 
