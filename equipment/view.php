@@ -1,14 +1,20 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require '../includes/auth.php';
+require_once '../includes/input.php';
 
 requireAdmin();
-require '../includes/db.php';
+require_once '../includes/db.php';
 
 
 
-$id = (int) $_GET['id'];
+try {
+    $id = inputPositiveInt($_GET, 'id');
+} catch (InvalidArgumentException) {
+    http_response_code(400);
+    exit('Некорректный идентификатор');
+}
 
 $stmt = $pdo->prepare("
     SELECT *
@@ -39,22 +45,7 @@ if (!$equipment) {
 
 }
 
-if (empty($equipment['qr_token'])) {
-
-    $equipment['qr_token'] = bin2hex(random_bytes(16));
-
-    $updateQrToken = $pdo->prepare("
-        UPDATE equipment
-        SET qr_token = ?
-        WHERE id = ?
-    ");
-
-    $updateQrToken->execute([
-        $equipment['qr_token'],
-        $equipment['id']
-    ]);
-
-}
+$equipment['qr_token'] = is_string($equipment['qr_token']) ? $equipment['qr_token'] : '';
 
 include '../includes/app_header.php';
 
@@ -92,15 +83,14 @@ include '../includes/app_header.php';
         Выдать
     </a>
 
-<?php else: ?>
+<?php elseif ($equipment['status'] === 'issued'): ?>
 
-    <a
-        href="return.php?id=<?= $equipment['id'] ?>"
-        class="btn btn-success"
-        onclick="return confirm('Подтвердить возврат оборудования?')"
-    >
-        Вернуть
-    </a>
+    <form method="POST" action="return.php?id=<?= (int)$equipment['id'] ?>" class="d-flex gap-2" onsubmit="return confirm('Подтвердить возврат оборудования?')">
+        <?= csrfField() ?>
+        <input type="hidden" name="condition_status" value="good">
+        <input type="hidden" name="return_notes" value="Возврат из карточки оборудования">
+        <button class="btn btn-success">Вернуть исправным</button>
+    </form>
 
 <?php endif; ?>
         <a
@@ -292,31 +282,26 @@ include '../includes/app_header.php';
 
         <?php
 
-        $scheme =
-            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-                ? 'https'
-                : 'http';
-
-        $basePath = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-
-        $qrUrl =
-            $scheme . '://' .
-            $_SERVER['HTTP_HOST'] .
-            $basePath .
-            '/qr.php?token=' .
-            urlencode($equipment['qr_token']);
-
-        $qrImage =
-            'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' .
-            urlencode($qrUrl);
+        $relativeQrUrl = url('equipment/qr.php?token=' . urlencode($equipment['qr_token']));
+        $qrUrl = APP_URL !== ''
+            ? APP_URL . $relativeQrUrl
+            : $relativeQrUrl;
+        $qrImage = APP_URL !== ''
+            ? 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' . urlencode($qrUrl)
+            : null;
 
         ?>
 
-        <img
-            src="<?= $qrImage ?>"
-            class="img-fluid border rounded p-2 bg-white mb-3"
-            style="max-width: 250px;"
-        >
+        <?php if ($qrImage !== null): ?>
+            <img
+                src="<?= e($qrImage) ?>"
+                class="img-fluid border rounded p-2 bg-white mb-3"
+                style="max-width: 250px;"
+                alt="QR-код оборудования"
+            >
+        <?php else: ?>
+            <div class="alert alert-warning small">Для генерации QR задайте APP_URL в окружении сервера.</div>
+        <?php endif; ?>
 
         <div class="small text-muted mb-3">
 
@@ -326,17 +311,16 @@ include '../includes/app_header.php';
 
         <div class="d-grid gap-2">
 
-            <a
-                href="<?= $qrImage ?>"
-                target="_blank"
-                class="btn btn-outline-primary btn-sm"
-            >
-                Открыть QR
-            </a>
+            <?php if ($qrImage !== null): ?>
+                <a href="<?= e($qrImage) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm">
+                    Открыть QR
+                </a>
+            <?php endif; ?>
 
             <a
-                href="<?= $qrUrl ?>"
+                href="<?= e($qrUrl) ?>"
                 target="_blank"
+                rel="noopener noreferrer"
                 class="btn btn-outline-dark btn-sm"
             >
                 Открыть страницу

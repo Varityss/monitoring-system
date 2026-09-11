@@ -1,15 +1,22 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 
 require '../includes/auth.php';
-require '../includes/db.php';
+require_once '../includes/db.php';
+require_once '../includes/input.php';
 
 requireAdmin();
 
 header('Content-Type: application/json; charset=utf-8');
 
-$code = trim($_GET['code'] ?? '');
+try {
+    $code = inputString($_GET, 'code', 2048, false) ?? '';
+} catch (InvalidArgumentException) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'message' => 'Некорректный код'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 if ($code === '') {
     echo json_encode([

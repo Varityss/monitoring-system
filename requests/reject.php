@@ -1,46 +1,21 @@
 <?php
 
-session_start();
-require '../includes/auth.php';
+require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/input.php';
+require_once __DIR__ . '/../includes/equipment_service.php';
 
 requireAdmin();
-require '../includes/db.php';
-
 requirePostRequest();
 verifyCsrfToken();
 
-
-$id = (int) $_GET['id'];
-
-$requestStmt = $pdo->prepare("
-    SELECT status
-    FROM requests
-    WHERE id = ?
-    LIMIT 1
-");
-
-$requestStmt->execute([$id]);
-
-$request = $requestStmt->fetch();
-
-if (!$request) {
-    die('Р—Р°СЏРІРєР° РЅРµ РЅР°Р№РґРµРЅР°');
+try {
+    $requestId = inputPositiveInt($_GET, 'id');
+    rejectRequest($pdo, $requestId);
+    redirect('requests/index.php');
+} catch (InvalidArgumentException|DomainException $error) {
+    http_response_code(409);
+    exit(e($error->getMessage()));
+} catch (Throwable $error) {
+    publicError($error);
 }
-
-if ($request['status'] !== 'pending') {
-    die('Р—Р°СЏРІРєР° СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅР°');
-}
-
-$stmt = $pdo->prepare("
-    UPDATE requests
-
-    SET status = 'rejected'
-
-    WHERE id = ?
-");
-
-$stmt->execute([$id]);
-
-logActivity($pdo, 'reject', 'request', $id, 'Заявка отклонена');
-
-redirect('requests/index.php');

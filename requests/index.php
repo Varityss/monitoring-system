@@ -1,46 +1,11 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require '../includes/auth.php';
 
 requireAdmin();
-require '../includes/db.php';
-date_default_timezone_set('Asia/Almaty');
-
-$activeRequests = $pdo->query("
-    SELECT *
-    FROM requests
-
-    WHERE status IN ('approved', 'issued')
-");
-
-$activeList = $activeRequests->fetchAll();
-
+require_once '../includes/db.php';
 $currentTime = time();
-
-foreach ($activeList as $activeRequest) {
-
-    $endTime = requestEndTimestamp($activeRequest);
-
-    if ($endTime !== null && $currentTime > $endTime) {
-
-        $overdueStmt = $pdo->prepare("
-            UPDATE requests
-
-            SET status = 'overdue'
-
-            WHERE id = ?
-        ");
-
-        $overdueStmt->execute([
-
-            $activeRequest['id']
-
-        ]);
-
-    }
-
-}
 $stmt = $pdo->query("
     SELECT requests.*, users.login
 
@@ -53,6 +18,14 @@ $stmt = $pdo->query("
 ");
 
 $requests = $stmt->fetchAll();
+
+foreach ($requests as &$requestRow) {
+    $endTimestamp = requestEndTimestamp($requestRow);
+    if (in_array($requestRow['status'], ['approved', 'issued'], true) && $endTimestamp !== null && $currentTime > $endTimestamp) {
+        $requestRow['status'] = 'overdue';
+    }
+}
+unset($requestRow);
 
 include '../includes/app_header.php';
 
@@ -274,13 +247,11 @@ else {
 
 ): ?>
 
-    <a
-        href="complete.php?id=<?= $request['id'] ?>"
-        class="btn btn-sm btn-success"
-        onclick="return confirm('Подтвердить возврат оборудования?')"
-    >
-        Завершить
-    </a>
+    <form method="POST" action="complete.php?id=<?= (int)$request['id'] ?>" class="d-flex gap-1" onsubmit="return confirm('Подтвердить массовый возврат оборудования?')">
+        <?= csrfField() ?>
+        <input type="hidden" name="return_notes" value="Массовый возврат подтверждён администратором">
+        <button class="btn btn-sm btn-success">Завершить</button>
+    </form>
 
 <?php endif; ?>
 
@@ -288,19 +259,8 @@ else {
 
         <div class="d-flex gap-2">
 
-            <a
-                href="approve.php?id=<?= $request['id'] ?>"
-                class="btn btn-sm btn-success"
-            >
-                Одобрить
-            </a>
-
-            <a
-                href="reject.php?id=<?= $request['id'] ?>"
-                class="btn btn-sm btn-danger"
-            >
-                Отклонить
-            </a>
+            <form method="POST" action="approve.php?id=<?= (int)$request['id'] ?>"><?= csrfField() ?><button class="btn btn-sm btn-success">Одобрить</button></form>
+            <form method="POST" action="reject.php?id=<?= (int)$request['id'] ?>" onsubmit="return confirm('Отклонить заявку?')"><?= csrfField() ?><button class="btn btn-sm btn-danger">Отклонить</button></form>
 
             
 

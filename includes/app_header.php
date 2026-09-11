@@ -34,7 +34,10 @@ if (!isset($_SESSION['user_id'])) {
         <a href="<?= url('requests/index.php') ?>"><?= e(t('nav.requests')) ?></a>
         <a href="<?= url('requests/return_scan.php') ?>"><?= e(t('nav.return')) ?></a>
         <a href="<?= url('users/index.php') ?>"><?= e(t('nav.users')) ?></a>
-        <a href="<?= url('logout.php') ?>"><?= e(t('nav.logout')) ?></a>
+        <form method="POST" action="<?= url('logout.php') ?>" class="d-inline">
+            <?= csrfField() ?>
+            <button type="submit" class="btn btn-link p-0 text-start"><?= e(t('nav.logout')) ?></button>
+        </form>
     </aside>
 
     <main class="main-content">

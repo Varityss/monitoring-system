@@ -17,16 +17,22 @@ function availableLanguages(): array
 
 function currentLanguage(): string
 {
-    if (isset($_GET['lang']) && array_key_exists($_GET['lang'], availableLanguages())) {
+    if (isset($_GET['lang']) && is_string($_GET['lang']) && array_key_exists($_GET['lang'], availableLanguages())) {
         $_SESSION['lang'] = $_GET['lang'];
-        setcookie('lang', $_GET['lang'], time() + 60 * 60 * 24 * 365, '/');
+        setcookie('lang', $_GET['lang'], [
+            'expires' => time() + 60 * 60 * 24 * 365,
+            'path' => '/',
+            'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
     }
 
-    if (isset($_SESSION['lang']) && array_key_exists($_SESSION['lang'], availableLanguages())) {
+    if (isset($_SESSION['lang']) && is_string($_SESSION['lang']) && array_key_exists($_SESSION['lang'], availableLanguages())) {
         return $_SESSION['lang'];
     }
 
-    if (isset($_COOKIE['lang']) && array_key_exists($_COOKIE['lang'], availableLanguages())) {
+    if (isset($_COOKIE['lang']) && is_string($_COOKIE['lang']) && array_key_exists($_COOKIE['lang'], availableLanguages())) {
         $_SESSION['lang'] = $_COOKIE['lang'];
         return $_COOKIE['lang'];
     }
@@ -314,8 +320,7 @@ function logActivity(
     ?string $description = null,
     ?int $userId = null
 ): void {
-    try {
-        $stmt = $pdo->prepare("
+    $stmt = $pdo->prepare("
             INSERT INTO activity_logs (
                 user_id,
                 action,
@@ -326,16 +331,36 @@ function logActivity(
             VALUES (?, ?, ?, ?, ?)
         ");
 
-        $stmt->execute([
+    $stmt->execute([
             $userId ?? currentUserId(),
             $action,
             $entityType,
             $entityId,
             $description
-        ]);
-    } catch (Throwable $e) {
-        // Logging must never break the main workflow.
+    ]);
+}
+
+function logActivityBestEffort(
+    PDO $pdo,
+    string $action,
+    string $entityType,
+    ?int $entityId = null,
+    ?string $description = null,
+    ?int $userId = null
+): void {
+    try {
+        logActivity($pdo, $action, $entityType, $entityId, $description, $userId);
+    } catch (Throwable $error) {
+        error_log('Activity log failure: ' . $error->getMessage());
     }
+}
+
+function publicError(Throwable $error): never
+{
+    $errorId = bin2hex(random_bytes(6));
+    error_log('Application error [' . $errorId . ']: ' . $error);
+    http_response_code(500);
+    exit('Ошибка операции. Код: ' . $errorId);
 }
 
 function equipmentStatusLabel(?string $status): string

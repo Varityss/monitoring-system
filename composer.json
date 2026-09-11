@@ -1,5 +1,16 @@
 {
+    "name": "college/monitoring-system",
+    "description": "Система учёта, выдачи и возврата оборудования колледжа",
+    "type": "project",
+    "license": "proprietary",
     "require": {
-        "phpoffice/phpspreadsheet": "^5.7"
+        "php": "^8.2",
+        "ext-mbstring": "*",
+        "ext-pdo": "*",
+        "phpoffice/phpspreadsheet": "^5.9"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
     }
 }

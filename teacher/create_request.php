@@ -1,9 +1,10 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 
-require '../includes/db.php';
+require_once '../includes/db.php';
 require '../includes/auth.php';
+require_once '../includes/input.php';
 
 requireTeacher();
 
@@ -12,6 +13,7 @@ $equipmentStmt = $pdo->query("
     FROM equipment
     WHERE status = 'available'
     AND archived = 0
+    AND type = 'Ноутбук'
     ORDER BY inventory_number ASC
 ");
 
@@ -19,59 +21,51 @@ $equipmentList = $equipmentStmt->fetchAll();
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $requestType = $_POST['request_type'] ?? 'lesson';
-    $selectionType = $_POST['equipment_selection_type'] ?? 'auto';
-    $requestedCount = max(0, (int)($_POST['requested_count'] ?? 0));
+    try {
+    verifyCsrfToken();
+    $requestType = inputEnum($_POST, 'request_type', ['lesson', 'work', 'competition', 'home']);
+    $selectionType = inputEnum($_POST, 'equipment_selection_type', ['auto', 'manual']);
+    $requestedCount = inputPositiveInt($_POST, 'requested_count', 100);
 
-    if ($requestedCount < 1) {
-        $error = t('error.count_required');
-    }
-
-    $cabinet = $requestType === 'lesson' ? trim($_POST['cabinet'] ?? '') : null;
-    $location = $requestType !== 'lesson' ? trim($_POST['location'] ?? '') : null;
+    $cabinet = $requestType === 'lesson' ? inputString($_POST, 'cabinet', 100, true) : null;
+    $location = $requestType !== 'lesson' ? inputString($_POST, 'location', 255, true) : null;
+    $purpose = inputString($_POST, 'purpose', 2000, true);
     $issuedFrom = null;
     $issuedUntil = null;
     $formattedDate = null;
     $startTime = null;
     $endTime = null;
 
-    if (!$error && $requestType === 'lesson') {
-        $lessonDate = DateTime::createFromFormat('d.m.Y', $_POST['lesson_date'] ?? '');
-
-        if (!$lessonDate) {
-            $error = t('error.bad_date');
-        } else {
-            $formattedDate = $lessonDate->format('Y-m-d');
-            $startTime = $_POST['start_time'] ?? '';
-            $endTime = $_POST['end_time'] ?? '';
-            $issuedFrom = $formattedDate . ' ' . $startTime;
-            $issuedUntil = $formattedDate . ' ' . $endTime;
-
-            if (strtotime($issuedFrom) < time()) {
-                $error = t('error.past_time');
-            } elseif (strtotime($issuedUntil) <= strtotime($issuedFrom)) {
-                $error = t('error.end_after_start');
-            }
-        }
-    } elseif (!$error) {
-        $issuedFrom = !empty($_POST['issued_from']) ? $_POST['issued_from'] : null;
-        $issuedUntil = !empty($_POST['issued_until']) ? $_POST['issued_until'] : null;
-
-        if ($issuedFrom && $issuedUntil && strtotime($issuedUntil) <= strtotime($issuedFrom)) {
-            $error = t('error.end_after_start');
-        }
+    if ($requestType === 'lesson') {
+        $lessonValue = inputString($_POST, 'lesson_date', 10, true);
+        $startTime = inputString($_POST, 'start_time', 5, true);
+        $endTime = inputString($_POST, 'end_time', 5, true);
+        $lessonDate = strictDate($lessonValue, 'd.m.Y');
+        strictDate($startTime, 'H:i');
+        strictDate($endTime, 'H:i');
+        $formattedDate = $lessonDate->format('Y-m-d');
+        $from = strictDate($formattedDate . ' ' . $startTime, 'Y-m-d H:i');
+        $until = strictDate($formattedDate . ' ' . $endTime, 'Y-m-d H:i');
+        if ($from->getTimestamp() < time()) { throw new InvalidArgumentException(t('error.past_time')); }
+        if ($until <= $from) { throw new InvalidArgumentException(t('error.end_after_start')); }
+        $issuedFrom = $from->format('Y-m-d H:i:s');
+        $issuedUntil = $until->format('Y-m-d H:i:s');
+    } else {
+        $from = strictDateTimeLocal(inputString($_POST, 'issued_from', 16, true));
+        $until = strictDateTimeLocal(inputString($_POST, 'issued_until', 16, true));
+        if ($from->getTimestamp() < time()) { throw new InvalidArgumentException(t('error.past_time')); }
+        if ($until <= $from) { throw new InvalidArgumentException(t('error.end_after_start')); }
+        $issuedFrom = $from->format('Y-m-d H:i:s');
+        $issuedUntil = $until->format('Y-m-d H:i:s');
     }
 
     $selectedEquipmentIds = [];
 
-    if (!$error && $selectionType === 'manual') {
-        $selectedEquipmentIds = array_values(array_unique(array_filter(array_map(
-            'intval',
-            $_POST['equipment_ids'] ?? []
-        ))));
+    if ($selectionType === 'manual') {
+        $selectedEquipmentIds = inputIdList($_POST, 'equipment_ids', 100);
 
         if (count($selectedEquipmentIds) !== $requestedCount) {
-            $error = t('error.manual_count');
+            throw new InvalidArgumentException(t('error.manual_count'));
         } else {
             $placeholders = implode(',', array_fill(0, count($selectedEquipmentIds), '?'));
             $availableStmt = $pdo->prepare("
@@ -80,22 +74,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 WHERE id IN ($placeholders)
                 AND status = 'available'
                 AND archived = 0
+                AND type = 'Ноутбук'
             ");
 
             $availableStmt->execute($selectedEquipmentIds);
 
             if ((int)$availableStmt->fetchColumn() !== $requestedCount) {
-                $error = t('error.equipment_unavailable');
+                throw new InvalidArgumentException(t('error.equipment_unavailable'));
             }
         }
     }
 
-    if (!$error) {
+    $pdo->beginTransaction();
         $stmt = $pdo->prepare("
             INSERT INTO requests (
                 user_id,
                 request_type,
                 equipment_selection_type,
+                equipment_type,
                 requested_count,
                 cabinet,
                 location,
@@ -107,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 purpose,
                 status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            VALUES (?, ?, ?, 'Ноутбук', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
         ");
 
         $stmt->execute([
@@ -122,12 +118,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $endTime,
             $issuedFrom,
             $issuedUntil,
-            $_POST['purpose'] ?? ''
+            $purpose
         ]);
 
         $requestId = (int)$pdo->lastInsertId();
-
-        logActivity($pdo, 'create', 'request', $requestId, 'Request created');
 
         if ($selectionType === 'manual' && $selectedEquipmentIds) {
             $insertEquipment = $pdo->prepare("
@@ -142,8 +136,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $insertEquipment->execute([$requestId, $equipmentId]);
             }
         }
-
+        logActivity($pdo, 'create', 'request', $requestId, 'Заявка создана');
+        $pdo->commit();
         redirect('teacher/index.php');
+    } catch (InvalidArgumentException $exception) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        $error = $exception->getMessage();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        publicError($exception);
     }
 }
 
@@ -186,6 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
 
             <form method="POST">
+                <?= csrfField() ?>
                 <div class="row g-4">
                     <div class="col-lg-6">
                         <label class="form-label"><?= e(t('request.type')) ?></label>
@@ -283,7 +285,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <div class="col-lg-8">
                         <label class="form-label"><?= e(t('request.purpose')) ?></label>
-                        <textarea name="purpose" class="form-control" rows="4"></textarea>
+                        <textarea name="purpose" class="form-control" maxlength="2000" rows="4" required></textarea>
                     </div>
                 </div>
 

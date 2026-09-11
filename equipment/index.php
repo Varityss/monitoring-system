@@ -1,22 +1,31 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 
 require '../includes/auth.php';
-require '../includes/db.php';
+require_once '../includes/db.php';
+require_once '../includes/input.php';
 
 
 requireAdmin();
 
-$search = $_GET['search'] ?? '';
-
-$scan = trim($_GET['scan'] ?? '');
-
+try {
+    $search = inputString($_GET, 'search', 255, false) ?? '';
+    $scan = inputString($_GET, 'scan', 2048, false) ?? '';
+    $status = inputString($_GET, 'status', 50, false) ?? '';
+    $condition = inputString($_GET, 'condition', 50, false) ?? '';
+} catch (InvalidArgumentException) {
+    http_response_code(400);
+    exit('Некорректные параметры поиска');
+}
 $scanError = '';
 
-$status = $_GET['status'] ?? '';
-
-$condition = $_GET['condition'] ?? '';
+if ($status !== '' && !in_array($status, ['available', 'reserved', 'issued', 'repair', 'written_off'], true)) {
+    $status = '';
+}
+if ($condition !== '' && !in_array($condition, ['good', 'repair', 'broken'], true)) {
+    $condition = '';
+}
 
 if ($scan !== '') {
 
@@ -521,13 +530,10 @@ include '../includes/app_header.php';
                                     Изменить
                                 </a>
 
-                                <a
-                                    href="archive.php?id=<?= $item['id'] ?>"
-                                    class="btn btn-sm btn-outline-danger"
-                                    onclick="return confirm('Архивировать оборудование?')"
-                                >
-                                    Архив
-                                </a>
+                                <form method="POST" action="archive.php?id=<?= (int)$item['id'] ?>" onsubmit="return confirm('Архивировать оборудование?')">
+                                    <?= csrfField() ?>
+                                    <button class="btn btn-sm btn-outline-danger">Архив</button>
+                                </form>
 
                             </div>
 

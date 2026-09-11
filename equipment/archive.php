@@ -1,24 +1,21 @@
 <?php
 
-session_start();
-require '../includes/auth.php';
+require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/input.php';
+require_once __DIR__ . '/../includes/equipment_service.php';
 
 requireAdmin();
+requirePostRequest();
+verifyCsrfToken();
 
-require '../includes/db.php';
-
-
-
-$id = (int) $_GET['id'];
-
-$stmt = $pdo->prepare("
-    UPDATE equipment
-    SET archived = 1
-    WHERE id = ?
-");
-
-$stmt->execute([$id]);
-
-logActivity($pdo, 'archive', 'equipment', $id, 'Оборудование отправлено в архив');
-
-redirect('equipment/index.php');
+try {
+    $id = inputPositiveInt($_GET, 'id');
+    archiveEquipment($pdo, $id);
+    redirect('equipment/index.php');
+} catch (InvalidArgumentException|DomainException $error) {
+    http_response_code(409);
+    exit(e($error->getMessage()));
+} catch (Throwable $error) {
+    publicError($error);
+}

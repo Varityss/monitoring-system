@@ -1,23 +1,23 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 
 require '../includes/auth.php';
+require_once '../includes/input.php';
 
 requireAdmin();
-require '../includes/db.php';
+require_once '../includes/db.php';
 
-if (!isset($_GET['token'])) {
-
-    die('QR token отсутствует');
-
+try {
+    $token = inputString($_GET, 'token', 128, true);
+} catch (InvalidArgumentException) {
+    http_response_code(400);
+    exit('Некорректный QR-код');
 }
-
-$token = $_GET['token'];
 
 $stmt = $pdo->prepare("
     SELECT *
     FROM equipment
-    WHERE qr_token = ?
+    WHERE qr_token = ? AND archived = 0
     LIMIT 1
 ");
 

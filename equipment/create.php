@@ -1,11 +1,13 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require '../includes/auth.php';
 
 requireAdmin();
 
-require '../includes/db.php';
+require_once '../includes/db.php';
+require_once '../includes/input.php';
+$error = '';
 
 $lastEquipment = $pdo->query("
     SELECT inventory_number
@@ -31,18 +33,21 @@ if ($lastEquipment) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    $inventory_number = trim($_POST['inventory_number']);
-    $barcode = trim($_POST['barcode'] ?? '');
-    $serial_number = trim($_POST['serial_number']);
-    $model = trim($_POST['model']);
-    $type = trim($_POST['type']);
-    $cabinet = trim($_POST['cabinet']);
-    $condition_status = trim($_POST['condition_status']);
-    $notes = trim($_POST['notes']);
+    try {
+    verifyCsrfToken();
+    $inventory_number = inputString($_POST, 'inventory_number', 255, true);
+    $barcode = inputString($_POST, 'barcode', 255, false);
+    $serial_number = inputString($_POST, 'serial_number', 255, true);
+    $model = inputString($_POST, 'model', 255, true);
+    $type = inputString($_POST, 'type', 100, true);
+    $type = mb_strtolower($type) === 'ноутбук' ? 'Ноутбук' : $type;
+    $cabinet = $type === 'Ноутбук' ? '408' : '411';
+    $condition_status = inputEnum($_POST, 'condition_status', ['good', 'broken', 'repair']);
+    $notes = inputString($_POST, 'notes', 2000, false);
 
     $qr_token = bin2hex(random_bytes(16));
 
+    $pdo->beginTransaction();
     $stmt = $pdo->prepare("
         INSERT INTO equipment (
 
@@ -63,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->execute([
 
         $inventory_number,
-        $barcode !== '' ? $barcode : null,
+        $barcode,
         $serial_number,
         $model,
         $type,
@@ -75,8 +80,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ]);
 
     logActivity($pdo, 'create', 'equipment', (int)$pdo->lastInsertId(), 'Добавлено оборудование ' . $inventory_number);
-
+    $pdo->commit();
     redirect('equipment/index.php');
+    } catch (InvalidArgumentException $exception) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        $error = $exception->getMessage();
+    } catch (PDOException $exception) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        if ($exception->getCode() === '23000') {
+            $error = 'Инвентарный, серийный номер или штрихкод уже существует';
+        } else {
+            publicError($exception);
+        }
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        publicError($exception);
+    }
 }
 
 include '../includes/app_header.php';
@@ -95,7 +114,9 @@ include '../includes/app_header.php';
 
     <div class="card-body">
 
+        <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
         <form method="POST">
+            <?= csrfField() ?>
 
             <div class="row">
 
@@ -185,6 +206,7 @@ include '../includes/app_header.php';
 
                     <select
                         name="type"
+                        id="equipment_type"
                         class="form-select"
                     >
 
@@ -216,9 +238,12 @@ include '../includes/app_header.php';
 
                     <input
                         type="text"
-                        name="cabinet"
+                        id="assigned_cabinet"
                         class="form-control"
+                        value="408"
+                        readonly
                     >
+                    <div class="form-text">Назначается автоматически по типу оборудования.</div>
 
                 </div>
 
@@ -292,6 +317,14 @@ function generateInventory() {
     input.value = 'NB-' + String(number).padStart(4, '0');
 
 }
+
+const equipmentType = document.getElementById('equipment_type');
+const assignedCabinet = document.getElementById('assigned_cabinet');
+function updateAssignedCabinet() {
+    assignedCabinet.value = equipmentType.value.trim().toLocaleLowerCase('ru') === 'ноутбук' ? '408' : '411';
+}
+equipmentType.addEventListener('change', updateAssignedCabinet);
+updateAssignedCabinet();
 
 </script>
 

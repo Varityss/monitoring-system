@@ -22,6 +22,22 @@ if (is_file($configFile)) {
     }
 }
 
+$environmentConfig = [
+    'host' => getenv('APP_DB_HOST'),
+    'port' => getenv('APP_DB_PORT'),
+    'dbname' => getenv('APP_DB_NAME'),
+    'user' => getenv('APP_DB_USER'),
+    'password' => getenv('APP_DB_PASSWORD'),
+    'debug' => getenv('APP_DEBUG'),
+];
+foreach ($environmentConfig as $key => $value) {
+    if ($value !== false && ($value !== '' || $key === 'password')) {
+        $config[$key] = $key === 'debug'
+            ? filter_var($value, FILTER_VALIDATE_BOOL)
+            : $value;
+    }
+}
+
 $host = trim((string)$config['host']);
 $port = trim((string)($config['port'] ?? ''));
 
@@ -41,12 +57,12 @@ try {
     $pdo = new PDO(
         $dsn,
         $config['user'],
-        $config['password']
-    );
-
-    $pdo->setAttribute(
-        PDO::ATTR_ERRMODE,
-        PDO::ERRMODE_EXCEPTION
+        $config['password'],
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]
     );
 
 } catch (PDOException $e) {

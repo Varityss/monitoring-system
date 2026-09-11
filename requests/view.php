@@ -1,12 +1,18 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 
 require '../includes/auth.php';
-require '../includes/db.php';
+require_once '../includes/db.php';
+require_once '../includes/input.php';
 
 requireAdmin();
-$id = (int)$_GET['id'];
+try {
+    $id = inputPositiveInt($_GET, 'id');
+} catch (InvalidArgumentException) {
+    http_response_code(400);
+    exit('Некорректный идентификатор');
+}
 
 $stmt = $pdo->prepare("
 
@@ -480,13 +486,10 @@ include '../includes/app_header.php';
 
     <?php if ($request['status'] === 'pending'): ?>
 
-        <a
-            href="approve.php?id=<?= $request['id'] ?>"
-            class="btn btn-success btn-lg"
-            onclick="return confirm('Выдать оборудование?')"
-        >
-            Выдать оборудование
-        </a>
+        <form method="POST" action="approve.php?id=<?= (int)$request['id'] ?>" onsubmit="return confirm('Выдать оборудование?')">
+            <?= csrfField() ?>
+            <button class="btn btn-success btn-lg w-100">Выдать оборудование</button>
+        </form>
 
     <?php elseif (in_array($request['status'], ['approved', 'issued'], true)): ?>
 
@@ -576,6 +579,14 @@ include '../includes/app_header.php';
 
 </div>
 
+<?php elseif (in_array($request['status'], ['approved', 'issued', 'overdue'], true)): ?>
+<div class="alert alert-warning mt-4 d-flex justify-content-between align-items-center">
+    <span>Акт выдачи ещё не сформирован.</span>
+    <form method="POST" action="create_document.php?id=<?= (int)$id ?>">
+        <?= csrfField() ?>
+        <button class="btn btn-sm btn-warning">Сформировать акт</button>
+    </form>
+</div>
 <?php endif; ?>
 
 <script>

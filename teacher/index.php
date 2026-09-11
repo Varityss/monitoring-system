@@ -1,8 +1,8 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 
-require '../includes/db.php';
+require_once '../includes/db.php';
 require '../includes/auth.php';
 
 requireTeacher();
@@ -17,6 +17,15 @@ $stmt = $pdo->prepare("
 $stmt->execute([$_SESSION['user_id']]);
 
 $requests = $stmt->fetchAll();
+
+$currentTime = time();
+foreach ($requests as &$requestRow) {
+    $endTimestamp = requestEndTimestamp($requestRow);
+    if (in_array($requestRow['status'], ['approved', 'issued'], true) && $endTimestamp !== null && $currentTime > $endTimestamp) {
+        $requestRow['status'] = 'overdue';
+    }
+}
+unset($requestRow);
 
 $statusCounts = [
     'pending' => 0,
@@ -80,9 +89,10 @@ function teacherStatusBadge(string $status): string
 
         <div class="d-flex align-items-center gap-2 flex-wrap">
             <?= languageSwitcher() ?>
-            <a href="../logout.php" class="btn btn-outline-dark">
-                <?= e(t('nav.logout')) ?>
-            </a>
+            <form method="POST" action="../logout.php" class="d-inline">
+                <?= csrfField() ?>
+                <button class="btn btn-outline-dark"><?= e(t('nav.logout')) ?></button>
+            </form>
         </div>
     </div>
 

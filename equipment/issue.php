@@ -1,179 +1,46 @@
 <?php
 
-session_start();
-require '../includes/auth.php';
+require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/input.php';
+require_once __DIR__ . '/../includes/equipment_service.php';
 
 requireAdmin();
-require '../includes/db.php';
-
-
-
-$id = (int) $_GET['id'];
-
-$stmt = $pdo->prepare("
-    SELECT *
-    FROM equipment
-    WHERE id = ?
-    LIMIT 1
-");
-
+$id = inputPositiveInt($_GET, 'id');
+$stmt = $pdo->prepare('SELECT * FROM equipment WHERE id = ? AND archived = 0 LIMIT 1');
 $stmt->execute([$id]);
-
 $equipment = $stmt->fetch();
-
-if (!$equipment) {
-
-    redirect('equipment/index.php');
-
-}
-
-if ($equipment['status'] !== 'available') {
-
-    die('Оборудование недоступно для выдачи');
-
-}
+if (!$equipment) { http_response_code(404); exit('Оборудование не найдено'); }
+$error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    $issued_to = trim($_POST['issued_to']);
-    $cabinet = trim($_POST['cabinet']);
-    $notes = trim($_POST['notes']);
-
-    $issue = $pdo->prepare("
-        INSERT INTO equipment_issues (
-
-            equipment_id,
-            request_id,
-            issued_to,
-            cabinet,
-            issued_by,
-            notes,
-            status
-
-        )
-        VALUES (?, ?, ?, ?, ?, 'issued')
-    ");
-
-    $issue->execute([
-
-        $id,
-        0,
-        $issued_to,
-        $cabinet,
-        $_SESSION['user_id'],
-        $notes
-
-    ]);
-
-    $update = $pdo->prepare("
-    UPDATE equipment
-
-    SET
-
-        status = 'issued',
-        cabinet = ?
-
-    WHERE id = ?
-");
-
-$update->execute([
-
-    $cabinet,
-    $id
-
-]);
-
-    
-
-    logActivity($pdo, 'issue', 'equipment', $id, 'Оборудование выдано: ' . $equipment['inventory_number']);
-
-    redirect('equipment/view.php?id=' . $id);
+    try {
+        verifyCsrfToken();
+        issueEquipmentDirect(
+            $pdo,
+            $id,
+            inputString($_POST, 'issued_to', 255, true),
+            inputString($_POST, 'cabinet', 100, false),
+            inputString($_POST, 'notes', 1000, false)
+        );
+        redirect('equipment/view.php?id=' . $id);
+    } catch (InvalidArgumentException|DomainException $exception) {
+        $error = $exception->getMessage();
+    } catch (Throwable $exception) {
+        publicError($exception);
+    }
 }
 
 include '../includes/app_header.php';
-
 ?>
-
-<div class="d-flex justify-content-between align-items-center mb-4">
-
-    <div>
-
-        <h1 class="mb-1">
-            Выдача оборудования
-        </h1>
-
-        <div class="text-muted">
-            <?= htmlspecialchars($equipment['inventory_number']) ?>
-        </div>
-
-    </div>
-
-    <a
-        href="view.php?id=<?= $equipment['id'] ?>"
-        class="btn btn-outline-dark"
-    >
-        Назад
-    </a>
-
-</div>
-
-<div class="card border-0 shadow-sm">
-
-    <div class="card-body">
-
-        <form method="POST">
-
-            <div class="mb-3">
-
-                <label class="form-label">
-                    Кому выдается
-                </label>
-
-                <input
-                    type="text"
-                    name="issued_to"
-                    class="form-control"
-                    required
-                >
-
-            </div>
-
-            <div class="mb-3">
-
-                <label class="form-label">
-                    Кабинет
-                </label>
-
-                <input
-                    type="text"
-                    name="cabinet"
-                    class="form-control"
-                >
-
-            </div>
-
-            <div class="mb-4">
-
-                <label class="form-label">
-                    Заметки
-                </label>
-
-                <textarea
-                    name="notes"
-                    class="form-control"
-                    rows="4"
-                ></textarea>
-
-            </div>
-
-            <button class="btn btn-primary">
-                Выдать оборудование
-            </button>
-
-        </form>
-
-    </div>
-
-</div>
-
+<div class="d-flex justify-content-between align-items-center mb-4"><div><h1 class="mb-1">Выдача оборудования</h1><div class="text-muted"><?= e($equipment['inventory_number']) ?></div></div><a href="view.php?id=<?= $id ?>" class="btn btn-outline-dark">Назад</a></div>
+<div class="card border-0 shadow-sm"><div class="card-body">
+<?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
+<form method="POST">
+<?= csrfField() ?>
+<div class="mb-3"><label class="form-label">Кому выдаётся</label><input type="text" name="issued_to" maxlength="255" class="form-control" required></div>
+<div class="mb-3"><label class="form-label">Куда выдаётся</label><input type="text" name="cabinet" maxlength="100" class="form-control"></div>
+<div class="mb-4"><label class="form-label">Основание / заметки</label><textarea name="notes" maxlength="1000" class="form-control" rows="4"></textarea></div>
+<button class="btn btn-primary">Выдать оборудование</button>
+</form></div></div>
 <?php include '../includes/app_footer.php'; ?>

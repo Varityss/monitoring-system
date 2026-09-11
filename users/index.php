@@ -1,10 +1,10 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 
 require '../includes/auth.php';
 
-require '../includes/db.php';
+require_once '../includes/db.php';
 
 requireAdmin();
 
@@ -16,11 +16,20 @@ $stmt = $pdo->query("
 ");
 
 $users = $stmt->fetchAll();
+$temporaryPasswordNotice = $_SESSION['temporary_password_notice'] ?? null;
+unset($_SESSION['temporary_password_notice']);
 
 include '../includes/app_header.php';
 
 ?>
 
+<?php if (is_array($temporaryPasswordNotice)): ?>
+    <div class="alert alert-warning">
+        Временный пароль для <strong><?= e($temporaryPasswordNotice['login'] ?? '') ?></strong>:
+        <code><?= e($temporaryPasswordNotice['password'] ?? '') ?></code>.
+        Он показывается один раз; передайте его пользователю безопасным способом.
+    </div>
+<?php endif; ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
 
@@ -172,13 +181,10 @@ include '../includes/app_header.php';
 
                     <li>
 
-                        <a
-                            class="dropdown-item text-danger"
-                            href="toogle.php?id=<?= $user['id'] ?>"
-                            onclick="return confirm('Деактивировать аккаунт?')"
-                        >
-                            Деактивировать
-                        </a>
+                        <form method="POST" action="toogle.php?id=<?= (int)$user['id'] ?>" onsubmit="return confirm('Деактивировать аккаунт?')">
+                            <?= csrfField() ?>
+                            <button class="dropdown-item text-danger">Деактивировать</button>
+                        </form>
 
                     </li>
 
@@ -186,12 +192,10 @@ include '../includes/app_header.php';
 
                     <li>
 
-                        <a
-                            class="dropdown-item text-success"
-                            href="activate.php?id=<?= $user['id'] ?>"
-                        >
-                            Активировать
-                        </a>
+                        <form method="POST" action="activate.php?id=<?= (int)$user['id'] ?>">
+                            <?= csrfField() ?>
+                            <button class="dropdown-item text-success">Активировать</button>
+                        </form>
 
                     </li>
 

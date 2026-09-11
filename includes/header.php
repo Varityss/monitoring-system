@@ -3,9 +3,7 @@
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/functions.php';
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/session.php';
 
 ?>
 
@@ -38,9 +36,10 @@ if (session_status() === PHP_SESSION_NONE) {
                 <a class="text-white text-decoration-none" href="<?= url('dashboard.php') ?>">
                     <?= e(t('nav.dashboard')) ?>
                 </a>
-                <a class="text-white text-decoration-none" href="<?= url('logout.php') ?>">
-                    <?= e(t('nav.logout')) ?>
-                </a>
+                <form method="POST" action="<?= url('logout.php') ?>" class="d-inline">
+                    <?= csrfField() ?>
+                    <button type="submit" class="btn btn-link text-white text-decoration-none p-0"><?= e(t('nav.logout')) ?></button>
+                </form>
             <?php else: ?>
                 <a class="text-white text-decoration-none" href="<?= url('login.php') ?>">
                     <?= e(t('nav.login')) ?>

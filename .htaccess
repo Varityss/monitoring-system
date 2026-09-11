@@ -2,16 +2,12 @@ Options -Indexes
 
 DirectoryIndex index.php
 
-<FilesMatch "\.(sql|md|lock|json|dist)$">
+<FilesMatch "(^\.|\.(sql|md|lock|json|dist|zip|bak|log)$|^(db_check|create_admin)\.php$)">
     Require all denied
-    Order allow,deny
-    Deny from all
 </FilesMatch>
 
-RedirectMatch 403 /(config|database|vendor)(/|$)
+RedirectMatch 403 /(?:\.git|\.agents|\.codex|audit|config|database|release|storage|vendor)(?:/|$)
 
 <FilesMatch "^\\.">
     Require all denied
-    Order allow,deny
-    Deny from all
 </FilesMatch>

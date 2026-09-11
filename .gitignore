@@ -3,7 +3,12 @@
 /release/
 /uploads/documents/*
 !/uploads/documents/.gitkeep
+/storage/backups/*
+!/storage/backups/.gitkeep
+/storage/documents/*
+!/storage/documents/.gitkeep
 /config/database.php
+/config/runtime.php
 /.zip
 /monitoring-system.zip
 *.log

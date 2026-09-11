@@ -1,14 +1,16 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require '../includes/auth.php';
 
 requireAdmin();
-require '../includes/db.php';
+require_once '../includes/db.php';
+require_once '../includes/input.php';
 
 
 
-$id = (int) $_GET['id'];
+$id = inputPositiveInt($_GET, 'id');
+$error = '';
 
 $stmt = $pdo->prepare("
     SELECT *
@@ -28,17 +30,19 @@ if (!$equipment) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+    verifyCsrfToken();
+    $inventory_number = inputString($_POST, 'inventory_number', 255, true);
+    $barcode = inputString($_POST, 'barcode', 255, false);
+    $serial_number = inputString($_POST, 'serial_number', 255, true);
+    $model = inputString($_POST, 'model', 255, true);
+    $type = inputString($_POST, 'type', 100, true);
+    $type = mb_strtolower($type) === 'ноутбук' ? 'Ноутбук' : $type;
+    $cabinet = $type === 'Ноутбук' ? '408' : '411';
+    $condition_status = inputEnum($_POST, 'condition_status', ['good', 'broken', 'repair']);
+    $notes = inputString($_POST, 'notes', 2000, false);
 
-    $inventory_number = trim($_POST['inventory_number']);
-    $barcode = trim($_POST['barcode'] ?? '');
-    $serial_number = trim($_POST['serial_number']);
-    $model = trim($_POST['model']);
-    $type = trim($_POST['type']);
-    $cabinet = trim($_POST['cabinet']);
-    $status = trim($_POST['status']);
-    $condition_status = trim($_POST['condition_status']);
-    $notes = trim($_POST['notes']);
-
+    $pdo->beginTransaction();
     $update = $pdo->prepare("
         UPDATE equipment
         SET
@@ -49,7 +53,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             model = ?,
             type = ?,
             cabinet = ?,
-            status = ?,
             condition_status = ?,
             notes = ?
 
@@ -59,12 +62,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $update->execute([
 
         $inventory_number,
-        $barcode !== '' ? $barcode : null,
+        $barcode,
         $serial_number,
         $model,
         $type,
         $cabinet,
-        $status,
         $condition_status,
         $notes,
         $id
@@ -72,8 +74,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ]);
 
     logActivity($pdo, 'update', 'equipment', $id, 'Изменено оборудование ' . $inventory_number);
-
+    $pdo->commit();
     redirect('equipment/view.php?id=' . $id);
+    } catch (InvalidArgumentException $exception) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        $error = $exception->getMessage();
+    } catch (PDOException $exception) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        if ($exception->getCode() === '23000') {
+            $error = 'Инвентарный, серийный номер или штрихкод уже существует';
+        } else {
+            publicError($exception);
+        }
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        publicError($exception);
+    }
 }
 
 include '../includes/app_header.php';
@@ -107,7 +123,9 @@ include '../includes/app_header.php';
 
     <div class="card-body">
 
+        <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
         <form method="POST">
+            <?= csrfField() ?>
 
             <div class="row">
 
@@ -187,6 +205,7 @@ include '../includes/app_header.php';
 
                     <select
                         name="type"
+                        id="equipment_type"
                         class="form-select"
                     >
 
@@ -211,6 +230,10 @@ include '../includes/app_header.php';
                             Монитор
                         </option>
 
+                        <?php if (!in_array($equipment['type'], ['Ноутбук', 'Проектор', 'Монитор'], true)): ?>
+                            <option value="<?= e($equipment['type']) ?>" selected><?= e($equipment['type']) ?></option>
+                        <?php endif; ?>
+
                     </select>
 
                 </div>
@@ -227,47 +250,19 @@ include '../includes/app_header.php';
 
                     <input
                         type="text"
-                        name="cabinet"
+                        id="assigned_cabinet"
                         class="form-control"
                         value="<?= htmlspecialchars($equipment['cabinet']) ?>"
+                        readonly
                     >
+                    <div class="form-text">Назначается автоматически по типу оборудования.</div>
 
                 </div>
 
                 <div class="col-md-6 mb-3">
-
-                    <label class="form-label">
-                        Статус
-                    </label>
-
-                    <select
-                        name="status"
-                        class="form-select"
-                    >
-
-                        <option
-                            value="available"
-                            <?= $equipment['status'] === 'available' ? 'selected' : '' ?>
-                        >
-                            Доступно
-                        </option>
-
-                        <option
-                            value="issued"
-                            <?= $equipment['status'] === 'issued' ? 'selected' : '' ?>
-                        >
-                            Выдано
-                        </option>
-
-                        <option
-                            value="repair"
-                            <?= $equipment['status'] === 'repair' ? 'selected' : '' ?>
-                        >
-                            Ремонт
-                        </option>
-
-                    </select>
-
+                    <label class="form-label">Статус учёта</label>
+                    <input class="form-control" value="<?= e(equipmentStatusLabel($equipment['status'])) ?>" disabled>
+                    <div class="form-text">Статус меняется только операциями выдачи, возврата и архивации.</div>
                 </div>
 
             </div>
@@ -335,5 +330,15 @@ include '../includes/app_header.php';
     </div>
 
 </div>
+
+<script>
+const equipmentType = document.getElementById('equipment_type');
+const assignedCabinet = document.getElementById('assigned_cabinet');
+function updateAssignedCabinet() {
+    assignedCabinet.value = equipmentType.value.trim().toLocaleLowerCase('ru') === 'ноутбук' ? '408' : '411';
+}
+equipmentType.addEventListener('change', updateAssignedCabinet);
+updateAssignedCabinet();
+</script>
 
 <?php include '../includes/app_footer.php'; ?>

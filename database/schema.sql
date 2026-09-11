@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS `users` (
   `role` varchar(50) DEFAULT 'user',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `session_version` int NOT NULL DEFAULT '1',
+  `must_change_password` tinyint(1) NOT NULL DEFAULT '0',
+  `password_changed_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `login` (`login`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -61,6 +64,8 @@ CREATE TABLE IF NOT EXISTS `requests` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `equipment_selection_type` varchar(20) DEFAULT 'auto',
+  `equipment_type` varchar(100) NOT NULL DEFAULT 'Ноутбук',
+  `recipient_name_snapshot` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
   KEY `status` (`status`)
@@ -69,11 +74,19 @@ CREATE TABLE IF NOT EXISTS `requests` (
 CREATE TABLE IF NOT EXISTS `equipment_issues` (
   `id` int NOT NULL AUTO_INCREMENT,
   `equipment_id` int NOT NULL,
-  `request_id` int NOT NULL,
+  `request_id` int DEFAULT NULL,
   `issued_to` varchar(255) DEFAULT NULL,
   `cabinet` varchar(100) DEFAULT NULL,
   `issued_by` int DEFAULT NULL,
   `notes` text,
+  `issued_to_snapshot` varchar(255) DEFAULT NULL,
+  `inventory_number_snapshot` varchar(255) DEFAULT NULL,
+  `serial_number_snapshot` varchar(255) DEFAULT NULL,
+  `model_snapshot` varchar(255) DEFAULT NULL,
+  `returned_by` int DEFAULT NULL,
+  `return_condition` varchar(100) DEFAULT NULL,
+  `return_notes` text,
+  `operation_key` varchar(64) DEFAULT NULL,
   `issued_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `returned_at` timestamp NULL DEFAULT NULL,
   `status` varchar(50) DEFAULT 'issued',
@@ -88,6 +101,7 @@ CREATE TABLE IF NOT EXISTS `request_documents` (
   `request_id` int NOT NULL,
   `file_name` varchar(255) NOT NULL,
   `original_name` varchar(255) NOT NULL,
+  `storage_key` varchar(255) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `request_id` (`request_id`)
@@ -105,6 +119,7 @@ CREATE TABLE IF NOT EXISTS `request_equipment` (
   KEY `request_id` (`request_id`),
   KEY `equipment_id` (`equipment_id`),
   KEY `status` (`status`)
+  ,UNIQUE KEY `request_equipment_unique` (`request_id`, `equipment_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `activity_logs` (
@@ -114,11 +129,23 @@ CREATE TABLE IF NOT EXISTS `activity_logs` (
   `entity_type` varchar(100) NOT NULL,
   `entity_id` int DEFAULT NULL,
   `description` text,
+  `details_json` json DEFAULT NULL,
+  `operation_key` varchar(64) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
   KEY `entity` (`entity_type`, `entity_id`),
   KEY `created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `login_attempts` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `login_key` char(64) NOT NULL,
+  `ip_hash` char(64) NOT NULL,
+  `attempted_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `login_time` (`login_key`, `attempted_at`),
+  KEY `ip_time` (`ip_hash`, `attempted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 COMMIT;

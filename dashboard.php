@@ -1,9 +1,9 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/includes/session.php';
 
 require 'includes/auth.php';
-require 'includes/db.php';
+require_once 'includes/db.php';
 
 requireAdmin();
 
